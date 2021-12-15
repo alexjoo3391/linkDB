@@ -32,7 +32,6 @@ public class AddLinkController {
 	private Stage pop;
 	
 	private String Class = null;
-	private int id = 0;
 	
 	public Library lib = new Library();
 	
@@ -42,9 +41,7 @@ public class AddLinkController {
 		String desc = AddLinkDesc.getText();
 		
 		if (lib.URLisValid(link) && Class != null && dClass != "" && desc != "") {
-			id = lib.getLinkId();
-			id++;
-			boolean isCompleted = lib.insertLink(this.id, link, Class, dClass, desc);
+			boolean isCompleted = lib.insertLink(link, Class, dClass, desc);
 			if(isCompleted) {
 				lib.sendSignal(1);
 				lib.alert("추가가 성공적으로 완료 되었습니다.", "");

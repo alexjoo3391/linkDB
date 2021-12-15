@@ -1,5 +1,8 @@
 package view;
 
+import java.awt.Toolkit;
+import java.awt.datatransfer.Clipboard;
+import java.awt.datatransfer.StringSelection;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
@@ -75,11 +78,12 @@ public class MainController implements Initializable {
 	private MenuButton LinkSearchdClassMenu;
 	@FXML
 	private AnchorPane mainPane;
+
 	private Stage pop;
 	private String Class = null;
 	private String dClass = null;
 	private int currentLink = -1;
-	private Preferences threadPref = Preferences.systemNodeForPackage(Main.class);
+	private ArrayList<LinkInfo> currentLinkList = new ArrayList<LinkInfo>();
 	private Thread signalThread;
 
 	public Library lib = new Library();
@@ -124,6 +128,7 @@ public class MainController implements Initializable {
 				while (true) {
 					if (lib.finder()) {
 						try {
+							currentLinkList = lib.getListLink();
 							BuildData();
 						} catch (IOException e) {
 							e.printStackTrace();
@@ -143,23 +148,20 @@ public class MainController implements Initializable {
 
 	public void BuildData() throws IOException {
 		ObservableList<TableRowDataModel> linkList = FXCollections.observableArrayList();
+		LinkSearchdClassMenu.getItems().clear();
 
-		ArrayList<Integer> id = lib.getListId();
-		ArrayList<Image> image = lib.getListImage();
-		ArrayList<String> link = lib.getListLink();
-		ArrayList<String> linkClass = lib.getListClass();
-		ArrayList<String> detailClass = lib.getListDetailClass();
-		ArrayList<String> descript = lib.getListDescript();
-
-		for (int i = 0; i < image.size(); i++) {
+		for (int i = 0; i < currentLinkList.size(); i++) {
 			TableRowDataModel trdm = new TableRowDataModel();
-			trdm.setId(id.get(i));
-			trdm.setLinkImage(image.get(i));
-			trdm.setLink(link.get(i));
-			trdm.setLinkClass(linkClass.get(i));
-			trdm.setDetailClass(detailClass.get(i));
-			trdm.setDescript(descript.get(i));
+			trdm.setId(currentLinkList.get(i).getId());
+			trdm.setLinkImage(currentLinkList.get(i).getImage());
+			trdm.setLink(currentLinkList.get(i).getLink());
+			trdm.setLinkClass(currentLinkList.get(i).getLinkClass());
+			trdm.setDetailClass(currentLinkList.get(i).getDetailClass());
+			trdm.setDescript(currentLinkList.get(i).getDescript());
 			linkList.add(trdm);
+
+			MenuItem mi = new MenuItem(currentLinkList.get(i).getDetailClass());
+			LinkSearchdClassMenu.getItems().add(mi);
 		}
 
 		LinkTable.setItems(linkList);
@@ -199,6 +201,10 @@ public class MainController implements Initializable {
 			lib.alert("선택된 링크가 없습니다.", "error");
 		} else {
 			lib.deleteLink(currentLink);
+			for (int i = 0; i < currentLinkList.size(); i++) {
+				if (currentLinkList.get(i).getId() == currentLink)
+					currentLinkList.remove(i);
+			}
 			BuildData();
 			File file = new File("src\\resources\\thumbnail.png");
 			BufferedImage bi = ImageIO.read(file);
@@ -246,36 +252,39 @@ public class MainController implements Initializable {
 	public void searchLink() throws IOException {
 		LinkTable.getItems().clear();
 		String keyword = LinkSearch.getText();
-		lib.searchLink(keyword, Class, dClass);
-
+		System.out.println("keyword : " + keyword + ", class : " + Class + ", detail : " + dClass);
+		
 		ObservableList<TableRowDataModel> linkList = FXCollections.observableArrayList();
+		ArrayList<LinkInfo> searched = new ArrayList<LinkInfo>();
 
-		ArrayList<Integer> id = lib.getSearchedListId();
-		ArrayList<Image> image = lib.getSearchedListImage();
-		ArrayList<String> link = lib.getSearchedListLink();
-		ArrayList<String> linkClass = lib.getSearchedListClass();
-		ArrayList<String> detailClass = lib.getSearchedListDetailClass();
-		ArrayList<String> descript = lib.getSearchedListDescript();
+		for (int i = 0; i < currentLinkList.size(); i++) {
+			if (currentLinkList.get(i).getDescript().contains(keyword)
+					|| (Class != null ? currentLinkList.get(i).getLinkClass().contains(Class) : false)   
+					|| (dClass != null ? currentLinkList.get(i).getDetailClass().contains(dClass) : false)) {
+				searched.add(currentLinkList.get(i));
+			}
+		}
 
-		for (int i = 0; i < image.size(); i++) {
+		for (int i = 0; i < searched.size(); i++) {
 			TableRowDataModel trdm = new TableRowDataModel();
-			trdm.setId(id.get(i));
-			trdm.setLinkImage(image.get(i));
-			trdm.setLink(link.get(i));
-			trdm.setLinkClass(linkClass.get(i));
-			trdm.setDetailClass(detailClass.get(i));
-			trdm.setDescript(descript.get(i));
+			trdm.setId(searched.get(i).getId());
+			trdm.setLinkImage(searched.get(i).getImage());
+			trdm.setLink(searched.get(i).getLink());
+			trdm.setLinkClass(searched.get(i).getLinkClass());
+			trdm.setDetailClass(searched.get(i).getDetailClass());
+			trdm.setDescript(searched.get(i).getDescript());
 			linkList.add(trdm);
 		}
 
-		lib.resetSearchedLink();
 		LinkTable.setItems(linkList);
 	}
 
 	public void copyLink() {
-		System.out.println("copy");
+		StringSelection stringSelection = new StringSelection(informHyperlink.getText());
+		Clipboard clipboard = Toolkit.getDefaultToolkit().getSystemClipboard();
+		clipboard.setContents(stringSelection, null);
 	}
-	
+
 	@FXML
 	public void exit() {
 		Stage stage = (Stage) mainPane.getScene().getWindow();
@@ -286,60 +295,55 @@ public class MainController implements Initializable {
 	@Override
 	public void initialize(URL location, ResourceBundle resources) {
 
-		
 		this.SignalFinder();
-		
-		ArrayList<String> detailClass = lib.getListDetailClass();
 
-		for (String str : detailClass) {
-			MenuItem mi = new MenuItem(str);
-			LinkSearchdClassMenu.getItems().add(mi);
-		}
+		LinkTableThumbnail.setCellFactory(param -> {
+			final ImageView imageview = new ImageView();
+			imageview.setFitWidth(150);
+			imageview.setFitHeight(100);
+			imageview.setPreserveRatio(true);
+
+			TableCell<TableRowDataModel, Image> cell = new TableCell<TableRowDataModel, Image>() {
+				public void updateItem(Image image, boolean empty) {
+					if (image != null) {
+						imageview.setImage(image);
+					}
+				}
+			};
+			cell.setGraphic(imageview);
+			return cell;
+		});
+
+		LinkTableThumbnail.setCellValueFactory(new PropertyValueFactory<TableRowDataModel, Image>("linkImage"));
+		LinkTableLink.setCellFactory(param -> {
+			final Hyperlink link = new Hyperlink();
+
+			TableCell<TableRowDataModel, Hyperlink> cell = new TableCell<TableRowDataModel, Hyperlink>() {
+				public void updateItem(Hyperlink item, boolean empty) {
+					link.setGraphic(item);
+					link.setOnAction(new EventHandler<ActionEvent>() {
+						@Override
+						public void handle(ActionEvent event) {
+							String str = event.getTarget().toString();
+							openLink(str.substring(41, str.length() - 1));
+
+						}
+					});
+
+				}
+			};
+
+			cell.setGraphic(link);
+			return cell;
+		});
+		LinkTableLink.setCellValueFactory(new PropertyValueFactory<TableRowDataModel, Hyperlink>("link"));
+		LinkTableClass.setCellValueFactory(new PropertyValueFactory<TableRowDataModel, String>("linkClass"));
+		LinkTableDetailClass.setCellValueFactory(new PropertyValueFactory<TableRowDataModel, String>("detailClass"));
+
+		ArrayList<LinkInfo> link = lib.getListLink();
+		currentLinkList = link;
 
 		try {
-			LinkTableThumbnail.setCellFactory(param -> {
-				final ImageView imageview = new ImageView();
-				imageview.setFitWidth(150);
-				imageview.setFitHeight(100);
-				imageview.setPreserveRatio(true);
-
-				TableCell<TableRowDataModel, Image> cell = new TableCell<TableRowDataModel, Image>() {
-					public void updateItem(Image image, boolean empty) {
-						if (image != null) {
-							imageview.setImage(image);
-						}
-					}
-				};
-				cell.setGraphic(imageview);
-				return cell;
-			});
-
-			LinkTableThumbnail.setCellValueFactory(new PropertyValueFactory<TableRowDataModel, Image>("linkImage"));
-			LinkTableLink.setCellFactory(param -> {
-				final Hyperlink link = new Hyperlink();
-
-				TableCell<TableRowDataModel, Hyperlink> cell = new TableCell<TableRowDataModel, Hyperlink>() {
-					public void updateItem(Hyperlink item, boolean empty) {
-						link.setGraphic(item);
-						link.setOnAction(new EventHandler<ActionEvent>() {
-							@Override
-							public void handle(ActionEvent event) {
-								String str = event.getTarget().toString();
-								openLink(str.substring(41, str.length() - 1));
-
-							}
-						});
-
-					}
-				};
-
-				cell.setGraphic(link);
-				return cell;
-			});
-			LinkTableLink.setCellValueFactory(new PropertyValueFactory<TableRowDataModel, Hyperlink>("link"));
-			LinkTableClass.setCellValueFactory(new PropertyValueFactory<TableRowDataModel, String>("linkClass"));
-			LinkTableDetailClass
-					.setCellValueFactory(new PropertyValueFactory<TableRowDataModel, String>("detailClass"));
 			BuildData();
 		} catch (IOException e) {
 			e.printStackTrace();
